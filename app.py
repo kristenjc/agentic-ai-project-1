@@ -12,11 +12,22 @@ from tools import TOOLS, run_tool
 
 # --- Config ---
 
-SYSTEM_PROMPT = (
-    "You are a helpful assistant. When a question depends on the weather or "
-    "outdoor conditions, call get_weather first, then answer in a sentence."
-)
-MAX_TOOL_ROUNDS = 5
+SYSTEM_PROMPT = """You are a clear and enthusiastic Formula 1 analyst.
+
+You help fans catch up on F1 news, understand championship standings, explore
+transparent title scenarios, and interpret historical driver performance by circuit.
+
+Use tools whenever a question needs current news, current standings, the calendar, or
+historical results. Never invent current results, news, quotations, or statistics. When
+you use news, mention its sources and make clear that the roundup may be incomplete.
+When discussing title chances, call analyze_title_path and explain that it is a scenario
+analysis, not a precise probability or betting recommendation. Historical track performance
+is context, not a prediction.
+
+Answer directly first, then provide evidence and data points. Keep responses concise. Infer the
+Constructors' Championship for a team and the Drivers' Championship for a named driver.
+"""
+MAX_TOOL_ROUNDS = 6
 
 # --- The Harness ---
 
@@ -46,7 +57,16 @@ def run_agent(messages: list[dict]) -> tuple[str, list[dict]]:
 
         # The harness, not the model, runs each tool and appends the result
         for call in reply.tool_calls:
-            args = json.loads(call.function.arguments)
+            try:
+                args = json.loads(call.function.arguments)
+                if not isinstance(args, dict):
+                    raise ValueError("arguments must be a JSON object")
+            except (json.JSONDecodeError, ValueError) as e:
+                args = {}
+                result = json.dumps({"error": f"The tool arguments were invalid JSON: {e}"})
+                tool_calls += [{"name": call.function.name, "args": args, "result": result}]
+                messages += [{"role": "tool", "tool_call_id": call.id, "content": result}]
+                continue
             result = run_tool(call.function.name, args)
             tool_calls += [{"name": call.function.name, "args": args, "result": result}]
 
